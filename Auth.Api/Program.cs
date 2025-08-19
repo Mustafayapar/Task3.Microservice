@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Serilog;
 using System.Reflection;
 using System.Text;
 
@@ -29,6 +30,21 @@ builder.Services.AddMediatR(cfg =>
         typeof(RevokeRefreshTokenHandler).Assembly
     );
 });
+
+// 🔹 Serilog ayarları
+builder.Host.UseSerilog((ctx, lc) => lc
+    .ReadFrom.Configuration(ctx.Configuration) // appsettings.json'dan okur
+    .Enrich.FromLogContext()
+    .Enrich.WithCorrelationId()
+    .Enrich.WithProperty("ServiceName", "Product.Api") // servis ismini sabitliyoruz
+    .WriteTo.Console(new Serilog.Formatting.Json.JsonFormatter()) // JSON structured logging
+                                                                  //.WriteTo.Seq("http://localhost:5341")        // opsiyonel: Seq
+                                                                  //.WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri("http://localhost:9200")) // opsiyonel: ELK
+                                                                  //{
+                                                                  //    AutoRegisterTemplate = true,
+                                                                  //    IndexFormat = "logs-{0:yyyy.MM.dd}"
+                                                                  //})
+);
 
 // Identity
 builder.Services.AddIdentity<User, IdentityRole<Guid>>(options =>

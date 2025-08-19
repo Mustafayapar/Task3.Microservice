@@ -1,4 +1,4 @@
-using MassTransit;
+﻿using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
@@ -10,6 +10,7 @@ using Product.Api.Application.Handlers;
 using Product.Api.Infrastructure.Cache;
 using Product.Api.Infrastructure.Messaging;
 using Product.Api.Infrastructure.Persistence;
+using Serilog;
 using System.Text;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
@@ -28,7 +29,20 @@ var jwtSecret = builder.Configuration["Jwt:Secret"]
           ?? "superSuperSecretKey_1234567890_ABCDEF_123456";
 var issuer = builder.Configuration["Jwt:Issuer"] ?? "AuthService";
 var audience = builder.Configuration["Jwt:Audience"] ?? "ApiUsers";
-
+// 🔹 Serilog ayarları
+builder.Host.UseSerilog((ctx, lc) => lc
+    .ReadFrom.Configuration(ctx.Configuration) // appsettings.json'dan okur
+    .Enrich.FromLogContext()
+    .Enrich.WithCorrelationId()
+    .Enrich.WithProperty("ServiceName", "Product.Api") // servis ismini sabitliyoruz
+    .WriteTo.Console(new Serilog.Formatting.Json.JsonFormatter()) // JSON structured logging
+                                                                  //.WriteTo.Seq("http://localhost:5341")        // opsiyonel: Seq
+                                                                  //.WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri("http://localhost:9200")) // opsiyonel: ELK
+                                                                  //{
+                                                                  //    AutoRegisterTemplate = true,
+                                                                  //    IndexFormat = "logs-{0:yyyy.MM.dd}"
+                                                                  //})
+);
 // DbContext
 builder.Services.AddDbContext<ProductDbContext>(opt => opt.UseSqlServer(sql));
 
@@ -43,6 +57,11 @@ builder.Services.AddMediatR(cfg =>
     );
 });
 
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration.GetConnectionString("Redis");
+    options.InstanceName = "ProductApi_";
+});
 
 // Event bus (RabbitMQ)
 builder.Services.AddMassTransit(x =>
@@ -63,7 +82,7 @@ builder.Services.AddMassTransit(x =>
     });
 });
 
-// Auth(JWT) � Update endpoint i�in gerekli
+// Auth(JWT) – Update endpoint için gerekli
 var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret));
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
